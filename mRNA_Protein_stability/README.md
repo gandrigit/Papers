@@ -8,9 +8,8 @@ The proteotranscriptomic landscape depends on the transcription, mRNA-turnover, 
 
 ## Scripts
 * **single_correlation.R** reproduces results for Figures 2A, 2B, 2C, 3A, S5A, S5B
-* **cross_matching.R** reproduces results for Figures 2D, S4_
+* **cross_matching.R** reproduces results for Figures 2D, S4
 * **tissue_vs_cell_line.R** reproduces results for Figures 3B, 3C
 * **non_tumor_vs_tumor.R** reproduces results for Figures 4A, 4B, S5C, S5D, S5E, S6
 * **early_vs_late.R** reproduces results for Figures 7, S9A, S9B
 * **RFP_barplot.R** reproduces results for Figure S3B
-_
