@@ -651,6 +651,184 @@ wilcox.res$FDR <- p.adjust(wilcox.res$"p.value", method = "BH")
 write.xlsx(wilcox.res, "CMS_wilcox_test.xlsx", row.names = FALSE)
 
 
+####################################################################
+# CHECK INFLUENCE OF MOLECULAR FEATURES (PROLIFERATION, HYPOXIA, EMT...)
+
+scMat <- read.xlsx(file.path("../data/", "H_NES_matrix.xlsx"), sheet = 1, rowNames = TRUE)
+scMat <- scMat[, match(samples, colnames(scMat))]
+# Define high / low groups per gene-sets
+scMat.group <- lapply(1:nrow(scMat), function(i){
+  sc <- as.numeric(scMat[i, ])
+  sc.median <- median(sc)
+  group <- ifelse(sc >= sc.median, "high", "low")
+  return(group)
+})
+
+scMat.group <- lapply(1:nrow(scMat), function(i){
+  sc <- as.numeric(scMat[i, ])
+  sc.quantile <- quantile(sc, probs = c(1/3, 2/3))
+  group <- rep("middle", length(sc))
+  group[sc < sc.quantile[1]] <- "low"
+  group[sc > sc.quantile[2]] <- "high"
+  return(group)
+})
+
+
+scMat.group <- do.call(cbind, scMat.group)
+rownames(scMat.group) <- samples
+colnames(scMat.group) <- rownames(scMat)
+
+# Jitter plot
+lapply(1:ncol(scMat.group), function(i){
+  ggmat$NES <- scMat.group[match(ggmat$SAMPLE, rownames(scMat.group)), i]
+  ggmat$NES <- factor(ggmat$NES, levels = c("low", "middle", "high"))
+  
+  p <- ggplot(ggmat, aes(x = name, y = value, fill = NES)) +
+    geom_point(pch = 21, position = position_jitterdodge(jitter.width = 0.1), alpha = 0.5) + 
+    geom_boxplot(outlier.size = 0, alpha = 0.1)
+  p <- p + theme_bw(base_size = 16)
+  #p <- p + scale_fill_manual(values=c("normal" = "grey80", "tumor" = "firebrick"))
+  p <- p + xlab("") + ylab("RNA / Protein spearman's correlation")
+  
+
+  ggsave(plot = p, filename = paste0(colnames(scMat.group)[i], "_RNA_prot_correlation_jitter.pdf"), width = 7.5, height = 7)
+  
+  write.xlsx(ggmat, paste0(colnames(scMat.group)[i], "_RNA_prot_correlation_jitter.xlsx"))
+  
+  # SHAPIRO
+  shapi <- lapply(unique(ggmat$NES), function(i){
+    sapply(unique(ggmat$name), function(j){
+      shapiro.test(ggmat$value[ggmat$NES == i & ggmat$name == j])$p.value
+    })
+  })
+  shapi <- do.call(cbind, shapi)
+  colnames(shapi) <- unique(ggmat$NES)
+  
+  shapi.qv <- apply(shapi, 2, p.adjust, method = "BH")
+  colnames(shapi.qv) <- paste0(colnames(shapi.qv), ".FDR")
+  shapi <- cbind(shapi, shapi.qv)
+  write.xlsx(shapi, paste0(colnames(scMat.group)[i], "_Shapiro_test.xlsx"), row.names = TRUE)
+  
+  # WILCOXON
+  combos <- combn(unique(ggmat$NES),2)
+  wilcox.res <- adply(combos, 2, function(x) {
+    x <- as.character(x)
+    wList <- lapply(unique(ggmat$name), function(i){
+      test <- wilcox.test(ggmat$value[ggmat$NES == x[1] & ggmat$name == i],
+                          ggmat$value[ggmat$NES == x[2] & ggmat$name == i], exact = TRUE)
+      
+      out <- data.frame("var1" = x[1]
+                        , "var2" = x[2]
+                        , "var1.mean" = mean(ggmat$value[ggmat$NES == x[1] & ggmat$name == i])
+                        , "var2.mean" = mean(ggmat$value[ggmat$NES == x[2] & ggmat$name == i])
+                        , "p.value" = sprintf("%.3f", test$p.value)
+      )
+      return(out)
+    })
+    return(do.call(rbind, wList))
+  })
+  wilcox.res$X1 <- rep(unique(ggmat$name), ncol(combos))
+  wilcox.res$p.value <- as.numeric(wilcox.res$p.value)
+  wilcox.res <- wilcox.res[order(wilcox.res$p.value), ]
+  wilcox.res$FDR <- p.adjust(wilcox.res$"p.value", method = "BH")
+  write.xlsx(wilcox.res, paste0(colnames(scMat.group)[i], "_wilcox_test.xlsx"), row.names = FALSE)
+  
+  
+  
+  
+})
+
+####################################################################
+# CHECK INFLUENCE OF TUMOR PURITY
+
+tpMat <- read.xlsx(file.path("../data", "Tumor purity.xlsx"), sheet = 1, rowNames = TRUE)
+rownames(tpMat) <- sapply(strsplit(rownames(tpMat), split = "-"),
+                          function(i) paste(i[1:3], collapse = "-"))
+tpMat <- t(tpMat[, c("IHC", "CPE")])
+tpMat <- tpMat[, match(samples, colnames(tpMat))]
+# Define high / low groups per gene-sets
+tpMat.group <- lapply(1:nrow(tpMat), function(i){
+  sc <- as.numeric(tpMat[i, ])
+  sc.median <- median(sc)
+  group <- ifelse(sc >= sc.median, "high", "low")
+  return(group)
+})
+
+tpMat.group <- lapply(1:nrow(tpMat), function(i){
+  sc <- as.numeric(tpMat[i, ])
+  sc.quantile <- quantile(sc, probs = c(1/3, 2/3))
+  group <- rep("middle", length(sc))
+  group[sc < sc.quantile[1]] <- "low"
+  group[sc > sc.quantile[2]] <- "high"
+  return(group)
+})
+
+
+tpMat.group <- do.call(cbind, tpMat.group)
+rownames(tpMat.group) <- samples
+colnames(tpMat.group) <- rownames(tpMat)
+
+# Jitter plot
+lapply(1:ncol(tpMat.group), function(i){
+  ggmat$NES <- tpMat.group[match(ggmat$SAMPLE, rownames(tpMat.group)), i]
+  ggmat$NES <- factor(ggmat$NES, levels = c("low", "middle", "high"))
+  
+  p <- ggplot(ggmat, aes(x = name, y = value, fill = NES)) +
+    geom_point(pch = 21, position = position_jitterdodge(jitter.width = 0.1), alpha = 0.5) + 
+    geom_boxplot(outlier.size = 0, alpha = 0.1)
+  p <- p + theme_bw(base_size = 16)
+  #p <- p + scale_fill_manual(values=c("normal" = "grey80", "tumor" = "firebrick"))
+  p <- p + xlab("") + ylab("RNA / Protein spearman's correlation")
+  
+  
+  ggsave(plot = p, filename = paste0(colnames(tpMat.group)[i], "_RNA_prot_correlation_jitter.pdf"), width = 7.5, height = 7)
+  
+  write.xlsx(ggmat, paste0(colnames(tpMat.group)[i], "_RNA_prot_correlation_jitter.xlsx"))
+  
+  # SHAPIRO
+  shapi <- lapply(unique(ggmat$NES), function(i){
+    sapply(unique(ggmat$name), function(j){
+      shapiro.test(ggmat$value[ggmat$NES == i & ggmat$name == j])$p.value
+    })
+  })
+  shapi <- do.call(cbind, shapi)
+  colnames(shapi) <- unique(ggmat$NES)
+  
+  shapi.qv <- apply(shapi, 2, p.adjust, method = "BH")
+  colnames(shapi.qv) <- paste0(colnames(shapi.qv), ".FDR")
+  shapi <- cbind(shapi, shapi.qv)
+  write.xlsx(shapi, paste0(colnames(tpMat.group)[i], "_Shapiro_test.xlsx"), row.names = TRUE)
+  
+  # WILCOXON
+  combos <- combn(unique(ggmat$NES),2)
+  wilcox.res <- adply(combos, 2, function(x) {
+    x <- as.character(x)
+    wList <- lapply(unique(ggmat$name), function(i){
+      test <- wilcox.test(ggmat$value[ggmat$NES == x[1] & ggmat$name == i],
+                          ggmat$value[ggmat$NES == x[2] & ggmat$name == i], exact = TRUE)
+      
+      out <- data.frame("var1" = x[1]
+                        , "var2" = x[2]
+                        , "var1.mean" = mean(ggmat$value[ggmat$NES == x[1] & ggmat$name == i])
+                        , "var2.mean" = mean(ggmat$value[ggmat$NES == x[2] & ggmat$name == i])
+                        , "p.value" = sprintf("%.3f", test$p.value)
+      )
+      return(out)
+    })
+    return(do.call(rbind, wList))
+  })
+  wilcox.res$X1 <- rep(unique(ggmat$name), ncol(combos))
+  wilcox.res$p.value <- as.numeric(wilcox.res$p.value)
+  wilcox.res <- wilcox.res[order(wilcox.res$p.value), ]
+  wilcox.res$FDR <- p.adjust(wilcox.res$"p.value", method = "BH")
+  write.xlsx(wilcox.res, paste0(colnames(tpMat.group)[i], "_wilcox_test.xlsx"), row.names = FALSE)
+  
+  
+  
+  
+})
+
+
 
 
 
