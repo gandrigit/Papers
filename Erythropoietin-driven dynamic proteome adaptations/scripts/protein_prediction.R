@@ -14,8 +14,6 @@ library(Cairo)
 library(RColorBrewer)
 library(org.Hs.eg.db)
 
-source("/Users/gandrieux/work/epo/scripts/proper/prot_data_reader.r")
-
 ############################################
 ###                                      ###
 ###               FUNCTION               ###
@@ -61,6 +59,17 @@ getR2 <- function(obs, pred)
 	return(r2)
 }
 
+loocv_pred <- function(rna, prot){
+  predP <- lapply(1:ncol(rna), function(j){
+    testM <- prot[, -j]/rna[, -j]
+    testMedian <- apply(testM, 1, median)
+    
+    return(rna[, j, drop = FALSE] * testMedian)
+  })
+  predP <- do.call(cbind, predP)
+  return(predP)
+}
+
 #getR <- function(obs, pred) return(((1 / length(obs)) * sum((obs - mean(obs)) * (pred - mean(pred))) / (sd(obs) * sd(pred)))^2)
 
 
@@ -97,8 +106,14 @@ title("", cex.sub = 0.75)
 dev.off()
 
 trans <- tsMat[,c(6:10)]
-predP <- trans * testMedian
+predP.all <- trans * testMedian
 prot <- tsMat[,c(1:5)]
+
+
+################################
+# leave one out cross validation
+
+predP <- loocv_pred(tsMat[,c(6:10)],  tsMat[,c(1:5)])
 
 # SAVE PREDICTIONS
 colnames(predP) <- sub("trans", "predicted_protein", colnames(predP))
